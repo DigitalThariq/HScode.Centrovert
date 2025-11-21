@@ -1,0 +1,8 @@
+{
+  "name": "HScode.Centrovert - HS Classifier",
+  "description": "AI-powered 8-digit HS Code extractor for Singapore and GCC markets using Gemini 2.5.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
