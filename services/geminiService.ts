@@ -181,10 +181,13 @@ async function fetchSaudiData(query: string): Promise<string> {
 export const identifyHSCode = async (
   productDescription: string,
   region: TargetRegion,
-  imageBase64?: string
+  imageBase64?: string,
+  onStatusUpdate?: (status: string) => void
 ): Promise<HSCodeResult> => {
   // We use the Gemini 2.5 Flash model which supports Google Search Grounding
   const modelId = "gemini-2.5-flash";
+
+  if (onStatusUpdate) onStatusUpdate("Initializing classification engine...");
 
   // 1. Attempt to fetch Live Data (RAG Pattern)
   let liveDataContext = "";
@@ -194,6 +197,7 @@ export const identifyHSCode = async (
   // Safely determine context based on region
   try {
       if (region === TargetRegion.SINGAPORE) {
+        if (onStatusUpdate) onStatusUpdate("Searching Singapore TradeNet & AHTN...");
         // For Singapore, we use Google Search Grounding to get specific 8-digit codes
         tools = [{ googleSearch: {} }];
         
@@ -202,49 +206,60 @@ export const identifyHSCode = async (
         if (apiData) liveDataContext += apiData + "\n";
 
         regionSpecificInstructions = `
-          - **CRITICAL**: You MUST use the Google Search Tool to find the exact 8-digit HS Code from the Singapore Customs TradeNet or 'customs.gov.sg' website.
-          - The last 2 digits are crucial. Do not default to '00' unless verified.
-          - Standard GST is 9%.
-          - Check for SFA (Food), HSA (Health Sciences), or Strategic Goods Control controls.
+          - **TARGET DATABASE**: Singapore TradeNet / AHTN 2022/2024.
+          - **ACCURACY PROTOCOL**: You MUST verify the 8-digit code via Search. For example, 'Laptops' are '8471.30.20', NOT '8471.30.10'.
+          - **CITATION**: You must state "Verified against Singapore Customs AHTN [Year]" in the 'sourceReference' field.
+          - **SEARCH STRATEGY**: Search for "Singapore Customs HS Code [product]" and look for the 'AHTN 2022' column.
+          - **TAX**: Standard GST is 9%.
+          - **CONTROLS**: Check for SFA (Food), HSA (Health Sciences), or Strategic Goods Control.
         `;
       } else if (region === TargetRegion.SAUDI_ARABIA) {
+        if (onStatusUpdate) onStatusUpdate("Querying ZATCA Tariff Database...");
         liveDataContext = await fetchSaudiData(productDescription);
         regionSpecificInstructions = `
-          - **CRITICAL**: Use the **Saudi ZATCA Integrated Tariff**.
-          - Provide **10-digit or 12-digit codes** where applicable (National Subheadings).
-          - **VAT**: Standard VAT in Saudi Arabia is **15%**.
-          - **Restrictions**: You MUST check for **Saber Platform** registration requirements.
-          - Check for **SASO** (Standards), **SFDA** (Food/Drug), or **CITC** (Telecom) requirements.
+          - **TARGET DATABASE**: Saudi ZATCA Integrated Tariff.
+          - **ACCURACY PROTOCOL**: Look for 10-digit or 12-digit national codes.
+          - **CITATION**: State "Verified against Saudi ZATCA Tariff" in 'sourceReference'.
+          - **SEARCH STRATEGY**: Search for "Saudi Customs Tariff [product] code".
+          - **TAX**: Standard VAT is 15%.
+          - **COMPLIANCE**: Check for **Saber Platform** & **SASO** IECEE requirements.
         `;
       } else if (region === TargetRegion.UAE) {
+        if (onStatusUpdate) onStatusUpdate("Checking Dubai Customs Records...");
         liveDataContext = await fetchUAEData(productDescription);
         regionSpecificInstructions = `
-          - Use the GCC Common Customs Tariff as applied by Dubai Customs.
-          - Provide 8-digit codes.
-          - Standard VAT is 5%.
+          - **TARGET DATABASE**: GCC Unified Customs Tariff (Dubai Customs).
+          - **ACCURACY PROTOCOL**: Provide the 8-digit GCC code.
+          - **CITATION**: State "Verified against GCC Common Tariff" in 'sourceReference'.
+          - **TAX**: Standard VAT is 5%.
         `;
       } else if (region === TargetRegion.INDIA) {
+        if (onStatusUpdate) onStatusUpdate("Searching ITC-HS & DGFT Policies...");
         tools = [{ googleSearch: {} }]; // Use Search for ITC-HS
         regionSpecificInstructions = `
-          - Use the **ITC-HS (Indian Trade Clarification based on Harmonized System)**.
-          - Provide 8-digit codes.
-          - **Tax**: Calculate **IGST** (Integrated GST) which is typically 5%, 12%, 18%, or 28%. Mention Social Welfare Surcharge (SWS) if applicable (usually 10% of BCD).
-          - **Restrictions**: Check for **BIS** (Bureau of Indian Standards) CRO requirements, **FSSAI** for food, and **DGFT** (Directorate General of Foreign Trade) Import Policy (Free/Restricted/Prohibited).
+          - **TARGET DATABASE**: ITC-HS 2022 (Indian Trade Clarification).
+          - **ACCURACY PROTOCOL**: Identify the specific 8-digit subheading. Example: 'Smartphones' -> '8517.13.00'.
+          - **CITATION**: State "Verified against Indian ITC-HS 2022" in 'sourceReference'.
+          - **TAX**: Calculate BCD + SWS + IGST.
+          - **COMPLIANCE**: Check BIS (CRO), WPC (Wireless), and DGFT Import Policy.
         `;
       } else if (region === TargetRegion.MALAYSIA) {
+        if (onStatusUpdate) onStatusUpdate("Consulting Malaysian Customs (PDK)...");
         tools = [{ googleSearch: {} }]; // Use Search for PDK
         regionSpecificInstructions = `
-          - Use the **Malaysian Customs Duties Order (PDK)** and ASEAN Harmonized Tariff Nomenclature (AHTN).
-          - Provide 10-digit codes where possible, otherwise 8-digit AHTN.
-          - **Tax**: Apply **SST** (Sales and Service Tax). Sales tax is typically 5% or 10%.
-          - **Restrictions**: Check for **SIRIM** approval for electronics, **MAQIS** for agriculture, and **NPRA** for cosmetics/drugs. Mention Approved Permits (AP) if required.
+          - **TARGET DATABASE**: Malaysian Customs Duties Order (PDK 2022/2024).
+          - **ACCURACY PROTOCOL**: Provide 10-digit codes where possible (PDK split).
+          - **CITATION**: State "Verified against Malaysia PDK 2022/2024" in 'sourceReference'.
+          - **TAX**: SST (Sales Tax 5% or 10%).
+          - **COMPLIANCE**: Check SIRIM (Electronics) & MAQIS.
         `;
       } else {
+        if (onStatusUpdate) onStatusUpdate("Consulting Global WCO Standards...");
         liveDataContext = await fetchUAEData(productDescription); 
         regionSpecificInstructions = `
-          - Use the Unified GCC Customs Tariff.
-          - Provide 8-digit codes.
-          - Standard VAT varies by country.
+          - **TARGET DATABASE**: WCO Harmonized System (2022 Edition).
+          - **ACCURACY PROTOCOL**: Provide 6-digit global code.
+          - **CITATION**: State "Based on WCO General Rules 2022" in 'sourceReference'.
         `;
       }
   } catch (err) {
@@ -257,6 +272,7 @@ export const identifyHSCode = async (
 
   // Add Image if present
   if (imageBase64) {
+    if (onStatusUpdate) onStatusUpdate("Analyzing product image features...");
     // Remove data url prefix if present (data:image/jpeg;base64,)
     const cleanBase64 = imageBase64.split(',')[1] || imageBase64;
     parts.push({
@@ -271,7 +287,7 @@ export const identifyHSCode = async (
   const promptText = `
     Act as an expert Customs Broker and Trade Compliance Specialist for ${region}.
     
-    Your task is to classify the following product into its correct Harmonized System (HS) Code.
+    Your task is to classify the following product into its correct Harmonized System (HS) Code and suggest similar items with HIGH ACCURACY.
     
     ${imageBase64 ? "Note: An image of the product has been provided. Use visual details (material, packaging, type) to refine the classification." : ""}
     
@@ -279,45 +295,66 @@ export const identifyHSCode = async (
     Target Import Country: "${region}"
     
     *** REAL-TIME DATA CONTEXT (High Priority) ***
-    ${liveDataContext ? liveDataContext : "No direct match in live government databases. Rely on internal knowledge or Google Search."}
+    ${liveDataContext ? liveDataContext : "No direct match in pre-fetched government databases. Rely on Google Search Tool."}
     **********************************************
 
     Guidelines:
-    1. If 'Real-Time Data Context' contains a match, prioritize that classification and set 'confidenceScore' to 95 or higher. Set 'source' to 'Live API'.
-    2. If Google Search was used to find the code, set 'source' to 'Live API'.
-    3. If relying on internal training, set 'source' to 'AI Model'.
-    4. **Region Specific Rules**: ${regionSpecificInstructions}
+    1. **MAIN CLASSIFICATION (High Accuracy)**: 
+       - Identify the exact 8-digit (or 10/12-digit) HS Code for ${region}. 
+       - **VERIFICATION**: You MUST use the Google Search Tool to find the official Tariff Schedule for ${region} (e.g., AHTN, ITC-HS, ZATCA).
+       - **ANTI-HALLUCINATION**: Do not invent generic suffixes (like .00 or .10) if they don't exist in the *current* tariff book (post-2022).
+       - **LEGACY CHECK**: Ensure you are not using pre-2022 codes (e.g., check if '9705.00' is now split into '9705.29', etc.).
     
-    Analyze the material, function, and composition of the product to determine the code.
+    2. **CITATION (Crucial)**:
+       - You MUST populate the 'sourceReference' field.
+       - Tell the user EXACTLY which document you used (e.g., "Singapore TradeNet AHTN 2022", "ZATCA Integrated Tariff 2024"). 
+       - If you inferred the code from general WCO rules because a national match wasn't found, state: "Inferred from WCO General Rules (National sub-heading not found)".
+    
+    3. **SIMILAR ITEMS**: 
+       - Return at least 5 similar or related items from the same HS Chapter or functionality group.
+       - This is crucial for users if their input was ambiguous.
+       
+    4. **Region Specific Rules**: ${regionSpecificInstructions}
+
+    5. **Source Attribution**: If you found the code via Google Search in an official document, set 'source' to 'Live API'.
 
     **IMPORTANT: RESPONSE FORMAT**
     You MUST return a VALID JSON object. Do not include markdown code blocks.
     The JSON must follow this structure exactly:
     {
-      "hsCode": "string (8-12 digits)",
-      "productName": "string",
-      "description": "string (Official Tariff Description)",
+      "hsCode": "string (Prefer 8+ digits if verified, else 6)",
+      "productName": "string (Official Tariff Name)",
+      "description": "string (Full Description from Tariff Book)",
       "dutyRate": "string (e.g., '5%', 'Free')",
       "taxRate": "string (e.g., '9% GST')",
       "restrictions": ["string (restriction 1)", "string (restriction 2)"],
-      "reasoning": "string",
+      "reasoning": "string (Explain exactly why this 8-digit code was chosen over others. Cite the specific tariff heading/subheading logic.)",
       "confidenceScore": number (0-100),
       "requiredDocuments": ["string (doc 1)", "string (doc 2)"],
-      "source": "Live API" | "AI Model"
+      "source": "Live API" | "AI Model",
+      "sourceReference": "string (Exact name of the Tariff Book or Authority verified against)",
+      "similarItems": [
+        {
+          "name": "string (similar product name)",
+          "hsCode": "string (HS Code)",
+          "reason": "string (1 sentence reason for similarity)"
+        }
+      ]
     }
   `;
   
   parts.push({ text: promptText });
 
   try {
+    if (onStatusUpdate) onStatusUpdate("Synthesizing final compliance report...");
     const response = await ai.models.generateContent({
       model: modelId,
       contents: { parts: parts },
       config: {
         // NOTE: responseMimeType cannot be set when using tools like Google Search.
         // We rely on the prompt to enforce JSON format.
-        temperature: 0.1,
-        systemInstruction: "You are a strict and precise trade compliance AI. You prioritize official national tariff books over generic HS codes. You ALWAYS output valid raw JSON.",
+        temperature: 0.05, // Very low temperature for maximum determinism and accuracy
+        systemInstruction: "You are a strict Trade Compliance Officer. Your only goal is ACCURACY. You prioritize official government tariff schedules over general knowledge. You verify every 8-digit code against the country's specific tariff book (AHTN, ITC-HS, etc.) using Google Search. You never halluciante suffixes.",
         tools: tools.length > 0 ? tools : undefined,
       },
     });

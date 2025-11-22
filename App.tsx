@@ -19,6 +19,7 @@ const App: React.FC = () => {
   const [input, setInput] = useState('');
   const [region, setRegion] = useState<TargetRegion>(TargetRegion.SINGAPORE);
   const [loading, setLoading] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState("Initializing...");
   const [result, setResult] = useState<HSCodeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   
@@ -48,11 +49,14 @@ const App: React.FC = () => {
     if (!input.trim() && !imagePreview) return;
 
     setLoading(true);
+    setLoadingStatus("Preparing analysis...");
     setError(null);
     setResult(null);
 
     try {
-      const data = await identifyHSCode(input, region, imagePreview || undefined);
+      const data = await identifyHSCode(input, region, imagePreview || undefined, (status) => {
+        setLoadingStatus(status);
+      });
       setResult(data);
     } catch (err) {
       setError("Failed to classify product. Please ensure the description or image is clear.");
@@ -291,7 +295,9 @@ const App: React.FC = () => {
                 <div className="w-16 h-16 bg-blue-50 dark:bg-slate-800 rounded-full mx-auto mb-6 flex items-center justify-center text-electric shadow-lg shadow-blue-100 dark:shadow-none">
                     {imagePreview ? <ScanLine className="w-8 h-8 animate-pulse" /> : <Loader2 className="w-8 h-8 animate-spin" />}
                 </div>
-                <h3 className="text-xl font-bold text-navy dark:text-white">{imagePreview ? "Analyzing Visual Features..." : "Consulting Trade Databases..."}</h3>
+                <h3 className="text-xl font-bold text-navy dark:text-white transition-all duration-300">
+                  {loadingStatus}
+                </h3>
                 <p className="text-slate-500 dark:text-slate-400 mt-2">Cross-referencing tariff schedules for {region}</p>
             </div>
           )}

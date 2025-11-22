@@ -11,6 +11,12 @@ export enum TargetRegion {
   GLOBAL = 'Global (6-digit)'
 }
 
+export interface SimilarItem {
+  name: string;
+  hsCode: string;
+  reason: string;
+}
+
 export interface HSCodeResult {
   hsCode: string;
   productName: string;
@@ -21,7 +27,9 @@ export interface HSCodeResult {
   reasoning: string;
   confidenceScore: number; // 0-100
   requiredDocuments: string[];
-  source?: 'Live API' | 'AI Model'; // New field to track data origin
+  source?: 'Live API' | 'AI Model'; // Broad category
+  sourceReference?: string; // Specific document/authority (e.g., "Singapore TradeNet AHTN 2022")
+  similarItems: SimilarItem[];
 }
 
 export interface ChatMessage {

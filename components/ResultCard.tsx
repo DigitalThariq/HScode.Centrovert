@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { HSCodeResult, TargetRegion } from '../types';
-import { ShieldCheck, AlertTriangle, FileText, Info, Download, Database, Bot, Copy, Check, FileCheck } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, FileText, Info, Download, Database, Bot, Copy, Check, FileCheck, Layers, BookOpen, ExternalLink, Globe } from 'lucide-react';
 import { jsPDF } from "jspdf";
 
 interface ResultCardProps {
@@ -19,6 +19,19 @@ const countryCodes: Record<TargetRegion, string> = {
   [TargetRegion.BAHRAIN]: 'bh',
   [TargetRegion.KUWAIT]: 'kw',
   [TargetRegion.GLOBAL]: 'un',
+};
+
+const officialPortals: Record<TargetRegion, { name: string; url: string }> = {
+  [TargetRegion.SINGAPORE]: { name: "Singapore TradeNet", url: "https://www.tradenet.gov.sg/tradenet/portlets/search/searchHSCA/searchInitHSCA.do" },
+  [TargetRegion.MALAYSIA]: { name: "JKDM HS Explorer", url: "http://mysstext.customs.gov.my/tariff/" },
+  [TargetRegion.INDIA]: { name: "Indian Trade Portal", url: "https://www.indiantradeportal.in/" },
+  [TargetRegion.UAE]: { name: "Dubai Customs Al Munasiq", url: "https://almunasiq.dubaicustoms.gov.ae/landing" },
+  [TargetRegion.SAUDI_ARABIA]: { name: "ZATCA Tariff Search", url: "https://zatca.gov.sa/en/e-services/pages/customs-tariff.aspx" },
+  [TargetRegion.QATAR]: { name: "Al Nadeeb Customs", url: "https://www.customs.gov.qa/" },
+  [TargetRegion.OMAN]: { name: "Oman Customs", url: "https://www.customs.gov.om/" },
+  [TargetRegion.BAHRAIN]: { name: "Bahrain Customs", url: "https://www.customs.gov.bh/" },
+  [TargetRegion.KUWAIT]: { name: "Kuwait KGAC", url: "https://kgac.gov.kw/" },
+  [TargetRegion.GLOBAL]: { name: "WCO Harmonized System", url: "https://www.wcoomd.org/" },
 };
 
 export const ResultCard: React.FC<ResultCardProps> = ({ result, region }) => {
@@ -65,7 +78,12 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, region }) => {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 116, 139); // Slate
-    doc.text(`Confidence: ${result.confidenceScore}%  |  Source: ${result.source || 'AI Model'}`, 14, yPos + 8);
+    doc.text(`Confidence: ${result.confidenceScore}%`, 14, yPos + 8);
+    
+    if (result.sourceReference) {
+      doc.text(`Source: ${result.sourceReference}`, 14, yPos + 14);
+      yPos += 6;
+    }
     
     yPos += 25;
 
@@ -110,11 +128,38 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, region }) => {
         addSection("Required Documents", result.requiredDocuments.join(", "));
     }
 
+    // Similar Items in PDF
+    if (result.similarItems && result.similarItems.length > 0) {
+      // Check for page break
+      if (yPos > 240) {
+        doc.addPage();
+        yPos = 20;
+      }
+      doc.setTextColor(0, 102, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.text("SIMILAR CLASSIFICATIONS", 14, yPos);
+      yPos += 10;
+      
+      result.similarItems.forEach((item, index) => {
+         if (yPos > 270) { doc.addPage(); yPos = 20; }
+         doc.setTextColor(26, 58, 82);
+         doc.setFontSize(10);
+         doc.setFont('helvetica', 'bold');
+         doc.text(`${index + 1}. ${item.name} (${item.hsCode})`, 14, yPos);
+         yPos += 5;
+         doc.setTextColor(50, 50, 50);
+         doc.setFont('helvetica', 'normal');
+         doc.text(item.reason, 14, yPos);
+         yPos += 10;
+      });
+    }
+
     doc.save(`Centrovert_HS_${result.hsCode}.pdf`);
   };
 
   // Get country code for flag
   const countryCode = countryCodes[region];
+  const officialPortal = officialPortals[region];
 
   return (
     <div className="w-full animate-fade-in-up">
@@ -191,6 +236,36 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, region }) => {
                         </div>
                     </div>
 
+                    {/* Source Citation Display & Official Link */}
+                    {result.sourceReference && (
+                       <div className="flex flex-col gap-2 mt-2 p-3 bg-blue-50 dark:bg-slate-800 rounded-lg border border-blue-100 dark:border-slate-700">
+                           <div className="flex items-start gap-2">
+                             <BookOpen className="w-4 h-4 text-electric shrink-0 mt-0.5" />
+                             <div>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                                    Verified Against:
+                                </span>
+                                <span className="text-xs font-semibold text-navy dark:text-white leading-tight block">
+                                    {result.sourceReference}
+                                </span>
+                             </div>
+                           </div>
+                           
+                           {officialPortal && (
+                             <a 
+                                href={officialPortal.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="mt-2 flex items-center justify-center gap-2 w-full py-2 bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded text-xs text-emerald-700 dark:text-emerald-400 transition-colors shadow-sm group/btn"
+                             >
+                                <Globe className="w-3 h-3 shrink-0" />
+                                <span className="truncate">Verify on <strong className="font-bold">{officialPortal.name}</strong></span>
+                                <ExternalLink className="w-3 h-3 ml-auto shrink-0 opacity-70 group-hover/btn:opacity-100" />
+                             </a>
+                           )}
+                       </div>
+                    )}
+
                     <div className="grid grid-cols-1 gap-3">
                         <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
                             <span className="block text-slate-400 text-[10px] font-bold uppercase mb-1">Import Duty</span>
@@ -235,7 +310,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, region }) => {
                          <ul className="space-y-3">
                             {result.restrictions.map((item, i) => (
                                 <li key={i} className="flex items-start gap-3 text-xs text-slate-600 dark:text-slate-400">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-electric mt-1.5 shrink-0 shadow-[0_0_5px_#0066ff]"></span>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-electric mt-1.5 shrink-0 shadow-[0_0_5px_#0066ff] animate-pulse"></span>
                                     {item}
                                 </li>
                             ))}
@@ -259,13 +334,42 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, region }) => {
                 </div>
             </div>
 
+            {/* Similar Items Section */}
+            {result.similarItems && result.similarItems.length > 0 && (
+              <div className="pt-6 border-t border-slate-100 dark:border-slate-800">
+                 <h4 className="text-xs font-bold text-navy dark:text-white uppercase tracking-widest mb-6 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-electric" /> Similar Classifications
+                </h4>
+                <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 dark:bg-slate-800/50">
+                      <tr>
+                        <th className="px-4 py-3 font-semibold text-navy dark:text-white text-xs uppercase tracking-wider">Product</th>
+                        <th className="px-4 py-3 font-semibold text-navy dark:text-white text-xs uppercase tracking-wider">HS Code</th>
+                        <th className="px-4 py-3 font-semibold text-navy dark:text-white text-xs uppercase tracking-wider">Similarity</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {result.similarItems.map((item, index) => (
+                        <tr key={index} className="hover:bg-blue-50/30 dark:hover:bg-slate-800/30 transition-colors">
+                          <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-200">{item.name}</td>
+                          <td className="px-4 py-3 font-mono text-electric font-bold">{item.hsCode}</td>
+                          <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">{item.reason}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       </div>
       
       <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-400 font-medium">
         <Info className="w-3 h-3" />
-        <span>AI Generated. Always verify with {region} Customs Authority.</span>
+        <span>AI Generated. Always verify on the official {region} Customs portal.</span>
       </div>
     </div>
   );
