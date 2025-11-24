@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { HSCodeResult, TargetRegion } from '../types';
-import { ShieldCheck, AlertTriangle, FileText, Info, Download, Database, Bot, Copy, Check, FileCheck, Layers, BookOpen, ExternalLink, Globe } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, FileText, Info, Download, Database, Bot, Copy, Check, FileCheck, Layers, BookOpen, ExternalLink, Globe, ClipboardCopy, ClipboardCheck } from 'lucide-react';
 import { jsPDF } from "jspdf";
 
 interface ResultCardProps {
@@ -36,6 +36,7 @@ const officialPortals: Record<TargetRegion, { name: string; url: string }> = {
 
 export const ResultCard: React.FC<ResultCardProps> = ({ result, region }) => {
   const [copied, setCopied] = useState(false);
+  const [fullCopied, setFullCopied] = useState(false);
 
   const getConfidenceDisplay = (score: number) => {
      return `${score}% Match`;
@@ -45,6 +46,36 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, region }) => {
     navigator.clipboard.writeText(result.hsCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyFullResult = () => {
+    const portalName = officialPortals[region]?.name;
+    const content = `HScode.Centrovert - Classification Result
+-----------------------------------------
+Region: ${region}
+Product: ${result.productName}
+HS Code: ${result.hsCode}
+
+Description:
+${result.description}
+
+Duty & Taxes:
+- Import Duty: ${result.dutyRate}
+- VAT/Tax: ${result.taxRate}
+
+Restrictions:
+${result.restrictions.length > 0 ? result.restrictions.join(', ') : 'None detected'}
+
+Reasoning:
+${result.reasoning}
+
+Source: ${result.sourceReference || 'AI Analysis'}
+${portalName ? `Official Portal: ${portalName}` : ''}
+`;
+
+    navigator.clipboard.writeText(content);
+    setFullCopied(true);
+    setTimeout(() => setFullCopied(false), 2000);
   };
 
   const handleDownloadPDF = () => {
@@ -198,13 +229,26 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, region }) => {
              <h3 className="text-2xl font-bold text-navy dark:text-white">{result.productName}</h3>
           </div>
           
-          <button 
-              onClick={handleDownloadPDF}
-              className="flex items-center gap-2 bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-navy dark:text-white border border-slate-200 dark:border-slate-700 text-xs font-bold px-5 py-3 rounded-lg transition-all shadow-sm uppercase tracking-wide group"
-          >
-              <Download className="w-4 h-4 text-electric group-hover:scale-110 transition-transform" />
-              Export PDF
-          </button>
+          <div className="flex items-center gap-3">
+            <button 
+                onClick={handleCopyFullResult}
+                className="flex items-center gap-2 bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-navy dark:text-white border border-slate-200 dark:border-slate-700 text-xs font-bold px-4 py-3 rounded-lg transition-all shadow-sm uppercase tracking-wide group"
+            >
+                {fullCopied ? (
+                    <ClipboardCheck className="w-4 h-4 text-emerald-500" />
+                ) : (
+                    <ClipboardCopy className="w-4 h-4 text-electric group-hover:scale-110 transition-transform" />
+                )}
+                <span>{fullCopied ? 'Copied' : 'Copy Result'}</span>
+            </button>
+            <button 
+                onClick={handleDownloadPDF}
+                className="flex items-center gap-2 bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-navy dark:text-white border border-slate-200 dark:border-slate-700 text-xs font-bold px-4 py-3 rounded-lg transition-all shadow-sm uppercase tracking-wide group"
+            >
+                <Download className="w-4 h-4 text-electric group-hover:scale-110 transition-transform" />
+                Export PDF
+            </button>
+          </div>
         </div>
 
         <div className="grid md:grid-cols-12 gap-0">
