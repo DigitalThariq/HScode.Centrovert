@@ -2,7 +2,7 @@ import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { TargetRegion, HSCodeResult } from "../types";
 
 // Initialize the Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY || '' });
 
 // --- Helper: Safe JSON Parser ---
 const cleanAndParseJSON = (text: string): any => {
@@ -59,15 +59,15 @@ async function fetchSingaporeData(query: string): Promise<string> {
   try {
     const url = `https://data.gov.sg/api/action/datastore_search?resource_id=${SG_RESOURCE_ID}&q=${encodeURIComponent(query)}&limit=3`;
     const response = await fetchWithTimeout(url);
-    
+
     if (!response.ok) {
       console.warn(`[Singapore API] Request failed. Status: ${response.status} ${response.statusText}`);
       if (response.status === 429) console.warn("[Singapore API] Rate limit exceeded.");
       return "";
     }
-    
+
     const data = await response.json();
-    
+
     // Robust check for data structure
     if (data?.result?.records && Array.isArray(data.result.records) && data.result.records.length > 0) {
       const records = data.result.records.map((r: any) => ({
@@ -80,9 +80,9 @@ async function fetchSingaporeData(query: string): Promise<string> {
     return "";
   } catch (error: any) {
     if (error.name === 'AbortError') {
-        console.warn("[Singapore API] Request timed out (exceeded 5000ms).");
+      console.warn("[Singapore API] Request timed out (exceeded 5000ms).");
     } else {
-        console.warn("[Singapore API] Network/Parsing Error:", error.message);
+      console.warn("[Singapore API] Network/Parsing Error:", error.message);
     }
     return "";
   }
@@ -93,7 +93,7 @@ async function fetchUAEData(query: string): Promise<string> {
   const token = process.env.UAE_API_TOKEN;
   if (!token) {
     console.warn("[UAE API] Skipping: No API Token found in environment variables (UAE_API_TOKEN).");
-    return ""; 
+    return "";
   }
 
   try {
@@ -104,7 +104,7 @@ async function fetchUAEData(query: string): Promise<string> {
         'Accept': 'application/json'
       }
     });
-    
+
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
         console.error("[UAE API] Authentication failed. Check UAE_API_TOKEN validity.");
@@ -113,19 +113,19 @@ async function fetchUAEData(query: string): Promise<string> {
       }
       return "";
     }
-    
+
     // Robust check for text/json content type before parsing
     const contentType = response.headers.get("content-type");
     if (contentType && contentType.indexOf("application/json") !== -1) {
-        const data = await response.json();
-        return `Match found in Dubai Customs Database: ${JSON.stringify(data)}`;
+      const data = await response.json();
+      return `Match found in Dubai Customs Database: ${JSON.stringify(data)}`;
     }
     return "";
   } catch (error: any) {
     if (error.name === 'AbortError') {
-        console.warn("[UAE API] Request timed out.");
+      console.warn("[UAE API] Request timed out.");
     } else {
-        console.warn("[UAE API] Error:", error.message);
+      console.warn("[UAE API] Error:", error.message);
     }
     return "";
   }
@@ -135,8 +135,8 @@ async function fetchUAEData(query: string): Promise<string> {
 async function fetchSaudiData(query: string): Promise<string> {
   const token = process.env.SAUDI_API_TOKEN;
   if (!token) {
-     console.warn("[Saudi API] Skipping: No API Token found in environment variables (SAUDI_API_TOKEN).");
-     return ""; 
+    console.warn("[Saudi API] Skipping: No API Token found in environment variables (SAUDI_API_TOKEN).");
+    return "";
   }
 
   try {
@@ -148,29 +148,29 @@ async function fetchSaudiData(query: string): Promise<string> {
         'Accept': 'application/json'
       }
     });
-    
+
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
-         console.error("[Saudi API] Authentication failed. Check SAUDI_API_TOKEN.");
+        console.error("[Saudi API] Authentication failed. Check SAUDI_API_TOKEN.");
       } else if (response.status === 503) {
-         console.warn("[Saudi API] Service unavailable (Maintenance).");
+        console.warn("[Saudi API] Service unavailable (Maintenance).");
       } else {
-         console.warn(`[Saudi API] Request failed. Status: ${response.status} ${response.statusText}`);
+        console.warn(`[Saudi API] Request failed. Status: ${response.status} ${response.statusText}`);
       }
       return "";
     }
-    
+
     const data = await response.json();
     // ZATCA API structure validation
     if (data && (Array.isArray(data) || data.items)) {
-         return `Match found in ZATCA Tariff Schedule: ${JSON.stringify(data)}`;
+      return `Match found in ZATCA Tariff Schedule: ${JSON.stringify(data)}`;
     }
     return "";
   } catch (error: any) {
     if (error.name === 'AbortError') {
-        console.warn("[Saudi API] Request timed out.");
+      console.warn("[Saudi API] Request timed out.");
     } else {
-        console.warn("[Saudi API] Error:", error.message);
+      console.warn("[Saudi API] Error:", error.message);
     }
     return "";
   }
@@ -196,16 +196,16 @@ export const identifyHSCode = async (
 
   // Safely determine context based on region
   try {
-      if (region === TargetRegion.SINGAPORE) {
-        if (onStatusUpdate) onStatusUpdate("Searching Singapore TradeNet & AHTN...");
-        // For Singapore, we use Google Search Grounding to get specific 8-digit codes
-        tools = [{ googleSearch: {} }];
-        
-        // We still attempt the API fetch as a secondary source
-        const apiData = await fetchSingaporeData(productDescription);
-        if (apiData) liveDataContext += apiData + "\n";
+    if (region === TargetRegion.SINGAPORE) {
+      if (onStatusUpdate) onStatusUpdate("Searching Singapore TradeNet & AHTN...");
+      // For Singapore, we use Google Search Grounding to get specific 8-digit codes
+      tools = [{ googleSearch: {} }];
 
-        regionSpecificInstructions = `
+      // We still attempt the API fetch as a secondary source
+      const apiData = await fetchSingaporeData(productDescription);
+      if (apiData) liveDataContext += apiData + "\n";
+
+      regionSpecificInstructions = `
           - **TARGET DATABASE**: Singapore TradeNet / AHTN 2022/2024.
           - **ACCURACY PROTOCOL**: You MUST verify the 8-digit code via Search. For example, 'Laptops' are '8471.30.20', NOT '8471.30.10'.
           - **CITATION**: You must state "Verified against Singapore Customs AHTN [Year]" in the 'sourceReference' field.
@@ -213,10 +213,10 @@ export const identifyHSCode = async (
           - **TAX**: Standard GST is 9%.
           - **CONTROLS**: Check for SFA (Food), HSA (Health Sciences), or Strategic Goods Control.
         `;
-      } else if (region === TargetRegion.SAUDI_ARABIA) {
-        if (onStatusUpdate) onStatusUpdate("Querying ZATCA Tariff Database...");
-        liveDataContext = await fetchSaudiData(productDescription);
-        regionSpecificInstructions = `
+    } else if (region === TargetRegion.SAUDI_ARABIA) {
+      if (onStatusUpdate) onStatusUpdate("Querying ZATCA Tariff Database...");
+      liveDataContext = await fetchSaudiData(productDescription);
+      regionSpecificInstructions = `
           - **TARGET DATABASE**: Saudi ZATCA Integrated Tariff.
           - **ACCURACY PROTOCOL**: Look for 10-digit or 12-digit national codes.
           - **CITATION**: State "Verified against Saudi ZATCA Tariff" in 'sourceReference'.
@@ -224,47 +224,47 @@ export const identifyHSCode = async (
           - **TAX**: Standard VAT is 15%.
           - **COMPLIANCE**: Check for **Saber Platform** & **SASO** IECEE requirements.
         `;
-      } else if (region === TargetRegion.UAE) {
-        if (onStatusUpdate) onStatusUpdate("Checking Dubai Customs Records...");
-        liveDataContext = await fetchUAEData(productDescription);
-        regionSpecificInstructions = `
+    } else if (region === TargetRegion.UAE) {
+      if (onStatusUpdate) onStatusUpdate("Checking Dubai Customs Records...");
+      liveDataContext = await fetchUAEData(productDescription);
+      regionSpecificInstructions = `
           - **TARGET DATABASE**: GCC Unified Customs Tariff (Dubai Customs).
           - **ACCURACY PROTOCOL**: Provide the 8-digit GCC code.
           - **CITATION**: State "Verified against GCC Common Tariff" in 'sourceReference'.
           - **TAX**: Standard VAT is 5%.
         `;
-      } else if (region === TargetRegion.INDIA) {
-        if (onStatusUpdate) onStatusUpdate("Searching ITC-HS & DGFT Policies...");
-        tools = [{ googleSearch: {} }]; // Use Search for ITC-HS
-        regionSpecificInstructions = `
+    } else if (region === TargetRegion.INDIA) {
+      if (onStatusUpdate) onStatusUpdate("Searching ITC-HS & DGFT Policies...");
+      tools = [{ googleSearch: {} }]; // Use Search for ITC-HS
+      regionSpecificInstructions = `
           - **TARGET DATABASE**: ITC-HS 2022 (Indian Trade Clarification).
           - **ACCURACY PROTOCOL**: Identify the specific 8-digit subheading. Example: 'Smartphones' -> '8517.13.00'.
           - **CITATION**: State "Verified against Indian ITC-HS 2022" in 'sourceReference'.
           - **TAX**: Calculate BCD + SWS + IGST.
           - **COMPLIANCE**: Check BIS (CRO), WPC (Wireless), and DGFT Import Policy.
         `;
-      } else if (region === TargetRegion.MALAYSIA) {
-        if (onStatusUpdate) onStatusUpdate("Consulting Malaysian Customs (PDK)...");
-        tools = [{ googleSearch: {} }]; // Use Search for PDK
-        regionSpecificInstructions = `
+    } else if (region === TargetRegion.MALAYSIA) {
+      if (onStatusUpdate) onStatusUpdate("Consulting Malaysian Customs (PDK)...");
+      tools = [{ googleSearch: {} }]; // Use Search for PDK
+      regionSpecificInstructions = `
           - **TARGET DATABASE**: Malaysian Customs Duties Order (PDK 2022/2024).
           - **ACCURACY PROTOCOL**: Provide 10-digit codes where possible (PDK split).
           - **CITATION**: State "Verified against Malaysia PDK 2022/2024" in 'sourceReference'.
           - **TAX**: SST (Sales Tax 5% or 10%).
           - **COMPLIANCE**: Check SIRIM (Electronics) & MAQIS.
         `;
-      } else {
-        if (onStatusUpdate) onStatusUpdate("Consulting Global WCO Standards...");
-        liveDataContext = await fetchUAEData(productDescription); 
-        regionSpecificInstructions = `
+    } else {
+      if (onStatusUpdate) onStatusUpdate("Consulting Global WCO Standards...");
+      liveDataContext = await fetchUAEData(productDescription);
+      regionSpecificInstructions = `
           - **TARGET DATABASE**: WCO Harmonized System (2022 Edition).
           - **ACCURACY PROTOCOL**: Provide 6-digit global code.
           - **CITATION**: State "Based on WCO General Rules 2022" in 'sourceReference'.
         `;
-      }
+    }
   } catch (err) {
-      console.warn("Error during context gathering:", err);
-      // Fail silently on context gathering to ensure main classification still proceeds
+    console.warn("Error during context gathering:", err);
+    // Fail silently on context gathering to ensure main classification still proceeds
   }
 
   // 2. Construct Parts for Multimodal Input
@@ -278,7 +278,7 @@ export const identifyHSCode = async (
     parts.push({
       inlineData: {
         data: cleanBase64,
-        mimeType: "image/jpeg" 
+        mimeType: "image/jpeg"
       }
     });
   }
@@ -342,7 +342,7 @@ export const identifyHSCode = async (
       ]
     }
   `;
-  
+
   parts.push({ text: promptText });
 
   try {
@@ -366,10 +366,10 @@ export const identifyHSCode = async (
 
     // Robust Cleaning and Parsing
     const result: HSCodeResult = cleanAndParseJSON(textResponse);
-    
+
     // Post-process: If search tool was used, ensure source is marked correctly if high confidence
     if (tools.length > 0 && result.confidenceScore > 85) {
-        result.source = 'Live API';
+      result.source = 'Live API';
     }
 
     return result;
